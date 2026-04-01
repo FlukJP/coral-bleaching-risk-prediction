@@ -16,46 +16,45 @@ from model_inference import (
 )
 
 
-st.set_page_config(
-    page_title="Coral Bleaching AI Studio",
-    layout="wide",
-)
-
-
 st.markdown(
     """
     <style>
+    :root {
+        --navy: #1A365D;
+        --cerulean: #2B6CB0;
+        --snow: #F7FAFC;
+        --slate: #1A202C;
+        --white: #FFFFFF;
+    }
     .stApp {
-        background:
-            radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 30%),
-            radial-gradient(circle at top right, rgba(8, 145, 178, 0.14), transparent 28%),
-            linear-gradient(180deg, #f5fbfa 0%, #eef8fb 45%, #f9fcff 100%);
+        background: var(--snow);
+        color: var(--slate);
     }
     .hero {
         padding: 1.6rem 1.8rem;
-        border-radius: 24px;
-        background: linear-gradient(135deg, rgba(8, 145, 178, 0.96), rgba(15, 118, 110, 0.94));
-        color: #f8fffe;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        border-radius: 22px;
+        background: linear-gradient(135deg, var(--navy), #234975);
+        color: var(--white);
+        box-shadow: 0 18px 40px rgba(26, 54, 93, 0.14);
         margin-bottom: 1rem;
     }
     .hero h1 {
         margin: 0 0 0.35rem 0;
-        font-size: 2.3rem;
+        font-size: 2.15rem;
         letter-spacing: -0.03em;
     }
     .hero p {
         margin: 0;
-        opacity: 0.96;
-        font-size: 1rem;
-        max-width: 58rem;
+        max-width: 56rem;
+        line-height: 1.7;
+        opacity: 0.97;
     }
     .panel {
-        background: rgba(255, 255, 255, 0.88);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 22px;
+        background: var(--white);
+        border: 1px solid rgba(43, 108, 176, 0.14);
+        border-radius: 20px;
         padding: 1rem 1.1rem;
-        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+        box-shadow: 0 12px 30px rgba(26, 54, 93, 0.06);
     }
     .status-ok, .status-missing {
         display: inline-block;
@@ -66,19 +65,19 @@ st.markdown(
         margin: 0.15rem 0.2rem 0.15rem 0;
     }
     .status-ok {
-        background: rgba(16, 185, 129, 0.14);
-        color: #047857;
+        background: rgba(43, 108, 176, 0.10);
+        color: var(--cerulean);
     }
     .status-missing {
-        background: rgba(239, 68, 68, 0.12);
-        color: #b91c1c;
+        background: rgba(220, 38, 38, 0.10);
+        color: #B91C1C;
     }
     .note {
-        background: rgba(255, 255, 255, 0.74);
-        border-left: 4px solid #0891b2;
-        padding: 0.85rem 1rem;
+        background: rgba(255, 255, 255, 0.92);
+        border-left: 4px solid var(--cerulean);
+        padding: 0.9rem 1rem;
         border-radius: 14px;
-        margin: 0.4rem 0 1rem 0;
+        margin: 0.45rem 0 1rem 0;
     }
     </style>
     """,
@@ -108,6 +107,72 @@ def artifact_status(path) -> str:
     return f'<span class="status-missing">{path.name} missing</span>'
 
 
+def is_boolean_like(series: pd.Series) -> bool:
+    if pd.api.types.is_bool_dtype(series):
+        return True
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+    normalized = {str(value).strip().lower() for value in non_null.unique()}
+    allowed = {"1", "0", "true", "false", "t", "f", "yes", "no", "y", "n"}
+    return normalized.issubset(allowed)
+
+
+def default_value_text(series: pd.Series) -> str:
+    if is_boolean_like(series):
+        mode = series.mode(dropna=True)
+        if mode.empty:
+            return "False"
+        return "True" if str(mode.iloc[0]).strip().lower() in {"1", "true", "t", "yes", "y"} else "False"
+    if pd.api.types.is_numeric_dtype(series):
+        return f"{float(series.median()):.4f}"
+    mode = series.mode(dropna=True)
+    return str(mode.iloc[0]) if not mode.empty else ""
+
+
+def build_template_csv(df: pd.DataFrame) -> str:
+    buffer = StringIO()
+    df.to_csv(buffer, index=False)
+    return buffer.getvalue()
+
+
+def build_download_bytes(df: pd.DataFrame) -> bytes:
+    return df.to_csv(index=False).encode("utf-8")
+
+
+def build_feature_groups(columns: list[str]) -> list[tuple[str, list[str]]]:
+    grouped = {
+        "Location and Date": [],
+        "Water and Temperature": [],
+        "SSTA Features": [],
+        "TSA Features": [],
+        "Climate Flags": [],
+        "Ocean and Realm": [],
+        "Exposure and Substrate": [],
+        "Other Features": [],
+    }
+
+    for column in columns:
+        if column.startswith(("Latitude", "Longitude", "Distance_to_Shore", "Turbidity", "Cyclone_Frequency", "Date_", "Depth_")):
+            grouped["Location and Date"].append(column)
+        elif column.startswith(("ClimSST", "Temperature_", "Temp_Range_C", "Windspeed")):
+            grouped["Water and Temperature"].append(column)
+        elif column.startswith("SSTA"):
+            grouped["SSTA Features"].append(column)
+        elif column.startswith("TSA"):
+            grouped["TSA Features"].append(column)
+        elif column.startswith(("Is_Tropical", "Aux_")):
+            grouped["Climate Flags"].append(column)
+        elif column.startswith(("Ocean_Name_", "Realm_Name_")):
+            grouped["Ocean and Realm"].append(column)
+        elif column.startswith(("Exposure_", "Substrate_")):
+            grouped["Exposure and Substrate"].append(column)
+        else:
+            grouped["Other Features"].append(column)
+
+    return [(name, cols) for name, cols in grouped.items() if cols]
+
+
 def render_single_prediction(prediction_row: pd.Series):
     metric_cols = st.columns(4)
     metric_cols[0].metric("Hybrid Prediction", f"{prediction_row['hybrid_prediction']:.2f}%")
@@ -128,24 +193,13 @@ def render_single_prediction(prediction_row: pd.Series):
     )
 
 
-def build_download_bytes(df: pd.DataFrame) -> bytes:
-    return df.to_csv(index=False).encode("utf-8")
-
-
-def build_template_csv(df: pd.DataFrame) -> str:
-    buffer = StringIO()
-    df.to_csv(buffer, index=False)
-    return buffer.getvalue()
-
-
 st.markdown(
     """
     <section class="hero">
         <h1>Coral Bleaching AI Studio</h1>
         <p>
-            Compare the hybrid Stacking Ensemble and the Custom Residual MLP in one place.
-            This page accepts the processed feature schema from <code>data/bleaching_model_ready.csv</code>,
-            runs both models, and returns ready-to-use bleaching predictions for your web workflow.
+            Provide the processed environmental values below, submit the form, and review the combined prediction
+            output from both artificial intelligence models.
         </p>
     </section>
     """,
@@ -157,8 +211,8 @@ left, right = st.columns([1.6, 1.0], gap="large")
 
 with left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Input")
-    st.caption("Use the processed feature schema only. Raw environmental data must be transformed first.")
+    st.subheader("Prediction Input")
+    st.caption("Enter processed feature values as text. Numeric values and boolean values are both supported.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
@@ -179,17 +233,21 @@ reference_features = get_reference_features()
 stacking_artifact = get_stacking_artifact()
 mlp_artifact, mlp_model = get_mlp_bundle()
 
+feature_columns = reference_features.columns.tolist()
+feature_groups = build_feature_groups(feature_columns)
+default_values = {column: default_value_text(reference_features[column]) for column in feature_columns}
+
 st.markdown(
     f"""
     <div class="note">
-    Required input columns: <strong>{reference_features.shape[1]}</strong> features.
-    You can edit sample rows directly below or upload a CSV that follows the same schema as the processed training data.
+    Required input fields: <strong>{len(feature_columns)}</strong>. The form is prefilled with representative values
+    from the processed training data so the interface can be tested immediately.
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-template_col, schema_col = st.columns([1.0, 1.6], gap="large")
+template_col, helper_col = st.columns([1.0, 1.6], gap="large")
 with template_col:
     st.download_button(
         "Download input template",
@@ -198,119 +256,100 @@ with template_col:
         mime="text/csv",
         use_container_width=True,
     )
-with schema_col:
-    st.caption("Template includes one sample row with the exact processed feature schema expected by both models.")
+with helper_col:
+    st.caption("Use `True/False` or `1/0` for ocean, realm, exposure, substrate, and other boolean-style indicator fields.")
 
 
-input_tab, upload_tab = st.tabs(["Manual Editor", "CSV Upload"])
+with st.form("prediction_form"):
+    for section_name, section_fields in feature_groups:
+        with st.expander(section_name, expanded=section_name in {"Location and Date", "Water and Temperature"}):
+            col_left, col_right = st.columns(2, gap="large")
+            for idx, field in enumerate(section_fields):
+                target_col = col_left if idx % 2 == 0 else col_right
+                help_text = "Enter True/False or 1/0" if is_boolean_like(reference_features[field]) else None
+                with target_col:
+                    st.text_input(
+                        label=field,
+                        value=default_values[field],
+                        key=f"field_{field}",
+                        help=help_text,
+                    )
 
-with input_tab:
-    st.write("Edit one or more rows directly in the table.")
-    seed_row_count = st.slider("Rows to preload", min_value=1, max_value=5, value=1, step=1)
-    editable_seed = reference_features.head(seed_row_count).copy()
-    manual_input_df = st.data_editor(
-        editable_seed,
-        num_rows="dynamic",
-        use_container_width=True,
-        height=320,
-        key="manual_editor",
-    )
-
-with upload_tab:
-    st.write("Upload a processed CSV with the same columns as `bleaching_model_ready.csv` minus the target column.")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    uploaded_df = None
-    if uploaded_file is not None:
-        uploaded_df = pd.read_csv(uploaded_file)
-        st.dataframe(uploaded_df.head(10), use_container_width=True)
-
-
-input_source = st.radio("Prediction source", options=["Manual editor", "Uploaded CSV"], horizontal=True)
-source_df = manual_input_df if input_source == "Manual editor" else uploaded_df
-
-predict_col, sample_col = st.columns([1.2, 1.8])
-with predict_col:
-    run_prediction = st.button("Run Both Models", type="primary", use_container_width=True)
-with sample_col:
-    st.caption("Tip: if you upload a CSV, extra columns are ignored. Missing required feature columns will stop prediction.")
+    run_prediction = st.form_submit_button("Predict Now", type="primary", use_container_width=True)
 
 
 if run_prediction:
-    if source_df is None or source_df.empty:
-        st.warning("Provide at least one input row before running prediction.")
-    else:
-        with st.spinner("Running both models..."):
-            try:
-                prediction_df, fill_notes = predict_all_models(
-                    source_df,
-                    reference_features,
-                    stacking_artifact,
-                    mlp_artifact,
-                    mlp_model,
+    input_payload = {column: st.session_state.get(f"field_{column}", "") for column in feature_columns}
+    input_df = pd.DataFrame([input_payload])
+
+    with st.spinner("Running both models..."):
+        try:
+            prediction_df, fill_notes = predict_all_models(
+                input_df,
+                reference_features,
+                stacking_artifact,
+                mlp_artifact,
+                mlp_model,
+            )
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.success("Prediction completed.")
+
+            if fill_notes:
+                with st.expander("Auto-filled values"):
+                    for note in fill_notes:
+                        st.write(f"- {note}")
+
+            prediction_row = prediction_df.iloc[0]
+            render_single_prediction(prediction_row)
+
+            result_cols = [
+                "stacking_prediction",
+                "bleaching_risk_probability",
+                "bleaching_risk_flag",
+                "two_stage_prediction",
+                "hybrid_prediction",
+                "mlp_prediction",
+                "hybrid_vs_mlp_gap",
+            ]
+
+            summary_left, summary_right = st.columns([1.3, 1.0], gap="large")
+
+            with summary_left:
+                st.subheader("Prediction Results")
+                st.dataframe(
+                    prediction_df[result_cols].round(4),
+                    use_container_width=True,
+                    hide_index=True,
                 )
-            except Exception as exc:
-                st.error(str(exc))
-            else:
-                st.success(f"Finished prediction for {len(prediction_df):,} row(s).")
+                st.download_button(
+                    "Download prediction as CSV",
+                    data=build_download_bytes(prediction_df),
+                    file_name="coral_bleaching_prediction.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
-                if fill_notes:
-                    with st.expander("Auto-filled values"):
-                        for note in fill_notes:
-                            st.write(f"- {note}")
-
-                if len(prediction_df) == 1:
-                    render_single_prediction(prediction_df.iloc[0])
-
-                result_cols = [
-                    "stacking_prediction",
-                    "bleaching_risk_probability",
-                    "bleaching_risk_flag",
-                    "two_stage_prediction",
-                    "hybrid_prediction",
-                    "mlp_prediction",
-                    "hybrid_vs_mlp_gap",
-                ]
-
-                summary_left, summary_right = st.columns([1.3, 1.0], gap="large")
-
-                with summary_left:
-                    st.subheader("Prediction Results")
-                    st.dataframe(
-                        prediction_df[result_cols].round(4),
-                        use_container_width=True,
-                    )
-                    st.download_button(
-                        "Download predictions as CSV",
-                        data=build_download_bytes(prediction_df),
-                        file_name="coral_bleaching_predictions.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                    )
-
-                with summary_right:
-                    st.subheader("Quick Summary")
-                    summary_df = prediction_df[result_cols].copy()
-                    summary_frame = pd.DataFrame(
-                        {
-                            "Metric": [
-                                "Average hybrid prediction",
-                                "Average MLP prediction",
-                                "Average risk probability",
-                                "Rows above risk threshold",
-                            ],
-                            "Value": [
-                                f"{summary_df['hybrid_prediction'].mean():.2f}%",
-                                f"{summary_df['mlp_prediction'].mean():.2f}%",
-                                f"{summary_df['bleaching_risk_probability'].mean() * 100:.2f}%",
-                                f"{int(summary_df['bleaching_risk_flag'].sum())} / {len(summary_df)}",
-                            ],
-                        }
-                    )
-                    st.dataframe(summary_frame, use_container_width=True, hide_index=True)
-
-                    chart_df = prediction_df[["hybrid_prediction", "mlp_prediction"]].head(20).reset_index(drop=True)
-                    st.caption("First 20 rows")
-                    st.bar_chart(chart_df, use_container_width=True)
+            with summary_right:
+                st.subheader("Quick Summary")
+                summary_frame = pd.DataFrame(
+                    {
+                        "Metric": [
+                            "Hybrid prediction",
+                            "Residual MLP",
+                            "Risk probability",
+                            "Risk flag",
+                        ],
+                        "Value": [
+                            f"{prediction_row['hybrid_prediction']:.2f}%",
+                            f"{prediction_row['mlp_prediction']:.2f}%",
+                            f"{prediction_row['bleaching_risk_probability'] * 100:.2f}%",
+                            "High risk" if int(prediction_row["bleaching_risk_flag"]) == 1 else "Below threshold",
+                        ],
+                    }
+                )
+                st.dataframe(summary_frame, use_container_width=True, hide_index=True)
 
 
 with st.expander("Model Details"):
