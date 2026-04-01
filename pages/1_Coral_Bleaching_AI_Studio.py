@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from io import StringIO
+
 import pandas as pd
 import streamlit as st
 
@@ -20,22 +22,15 @@ st.markdown(
     :root {
         --navy: #1A365D;
         --cerulean: #2B6CB0;
-        --snow: #F7FAFC; /* พื้นหลังสว่างสบายตา */
-        --slate: #1A202C; /* สีตัวอักษรหลัก อ่านง่าย */
+        --snow: #F7FAFC;
+        --slate: #1A202C;
         --white: #FFFFFF;
         --border: rgba(43, 108, 176, 0.16);
     }
     html, body, .stApp {
-        background-color: var(--snow) !important;
+        background: var(--snow);
         color: var(--slate);
         font-family: "Segoe UI", Arial, sans-serif;
-    }
-    h1, h2, h3, h4, h5, h6 {
-        color: var(--navy) !important;
-        font-weight: 700;
-    }
-    p, li, span, div {
-        color: var(--slate);
     }
     .block-container {
         max-width: 1280px !important;
@@ -45,147 +40,141 @@ st.markdown(
     .topbar {
         background: var(--navy);
         color: var(--white);
-        border-radius: 12px;
+        border-radius: 18px;
         padding: 0.9rem 1.15rem;
         margin-bottom: 1rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 4px 12px rgba(26, 54, 93, 0.1);
+        box-shadow: 0 12px 28px rgba(26, 54, 93, 0.16);
     }
     .topbar-title {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         font-weight: 700;
-        color: var(--white);
+        letter-spacing: -0.02em;
     }
     .topbar-crumb {
-        font-size: 0.85rem;
-        color: rgba(255, 255, 255, 0.8);
-        background: rgba(255,255,255,0.15);
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
+        font-size: 0.84rem;
+        color: rgba(255, 255, 255, 0.86);
     }
     .hero {
-        background: var(--navy);
+        background: linear-gradient(135deg, var(--navy), #264975);
         color: var(--white);
-        border-radius: 16px;
-        padding: 1.8rem 2rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 8px 24px rgba(26, 54, 93, 0.15);
+        border-radius: 24px;
+        padding: 1.7rem 1.85rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 16px 36px rgba(26, 54, 93, 0.16);
     }
     .hero h1 {
-        color: var(--white) !important;
-        margin: 0 0 0.5rem 0;
-        font-size: 2.2rem;
+        margin: 0 0 0.4rem 0;
+        font-size: 2rem;
+        letter-spacing: -0.03em;
     }
     .hero p {
-        color: rgba(255, 255, 255, 0.9) !important;
         margin: 0;
-        font-size: 1.05rem;
-        max-width: 65rem;
-        line-height: 1.6;
+        line-height: 1.75;
+        max-width: 60rem;
     }
     .panel {
         background: var(--white);
         border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 16px rgba(26, 54, 93, 0.04);
+        border-radius: 22px;
+        padding: 1.15rem 1.2rem;
+        box-shadow: 0 12px 28px rgba(26, 54, 93, 0.06);
         margin-bottom: 1rem;
     }
     .panel h3 {
+        color: var(--navy);
         margin-top: 0;
-        margin-bottom: 0.5rem;
     }
     .note {
-        background: var(--white);
+        background: rgba(255, 255, 255, 0.92);
         border-left: 4px solid var(--cerulean);
-        border-radius: 8px;
-        padding: 1rem 1.2rem;
-        line-height: 1.6;
+        border-radius: 14px;
+        padding: 0.9rem 1rem;
+        line-height: 1.7;
         margin-bottom: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     .status-ok, .status-missing {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.4rem 0.8rem;
-        border-radius: 6px;
-        font-size: 0.85rem;
+        display: inline-block;
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.86rem;
         font-weight: 600;
-        margin: 0.2rem 0.3rem 0.2rem 0;
+        margin: 0.15rem 0.2rem 0.15rem 0;
     }
     .status-ok {
-        background: rgba(43, 108, 176, 0.08);
+        background: rgba(43, 108, 176, 0.10);
         color: var(--cerulean);
-        border: 1px solid rgba(43, 108, 176, 0.2);
     }
     .status-missing {
-        background: rgba(245, 158, 11, 0.1);
-        color: #B45309;
-        border: 1px solid rgba(245, 158, 11, 0.3);
+        background: rgba(220, 38, 38, 0.10);
+        color: #B91C1C;
     }
     details[data-testid="stExpander"] {
         background: var(--white) !important;
         border: 1px solid var(--border) !important;
-        border-radius: 12px !important;
-        margin-bottom: 0.8rem !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
+        border-radius: 14px !important;
+        margin-bottom: 0.7rem !important;
+        box-shadow: none !important;
     }
     details[data-testid="stExpander"] summary {
         font-weight: 600 !important;
         color: var(--navy) !important;
-        padding: 0.5rem !important;
     }
     .stTextInput > div > div > input {
-        border-radius: 8px !important;
-        border: 1px solid rgba(43, 108, 176, 0.3) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(43, 108, 176, 0.22) !important;
         background: var(--white) !important;
         color: var(--slate) !important;
-        padding: 0.6rem !important;
+        box-shadow: none !important;
     }
     .stTextInput > div > div > input:focus {
         border-color: var(--cerulean) !important;
         box-shadow: 0 0 0 1px var(--cerulean) !important;
     }
-    /* Buttons */
+    .stFormSubmitButton > button,
+    .stDownloadButton > button,
+    .stPageLink a {
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+    }
     .stFormSubmitButton > button {
         background: var(--navy) !important;
         color: var(--white) !important;
-        border-radius: 8px !important;
         border: none !important;
-        padding: 0.75rem 2rem !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-        transition: all 0.2s;
-    }
-    .stFormSubmitButton > button:hover {
-        background: var(--cerulean) !important;
+        padding: 0.72rem 1.1rem !important;
     }
     .stDownloadButton > button {
-        background: rgba(43, 108, 176, 0.05) !important;
+        background: rgba(43, 108, 176, 0.10) !important;
         color: var(--cerulean) !important;
-        border: 1px solid var(--cerulean) !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-    }
-    .stDownloadButton > button:hover {
-        background: rgba(43, 108, 176, 0.1) !important;
+        border: 1px solid rgba(43, 108, 176, 0.22) !important;
     }
     .stPageLink a {
-        background: var(--white);
+        background: rgba(43, 108, 176, 0.10);
         color: var(--cerulean) !important;
-        border: 1px solid var(--cerulean);
-        border-radius: 8px;
-        padding: 0.6rem 1.2rem;
+        border: 1px solid rgba(43, 108, 176, 0.22);
+        padding: 0.68rem 1rem;
         text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        font-weight: 600;
-        transition: all 0.2s;
+        display: inline-block;
+        width: 100%;
+        text-align: center;
     }
-    .stPageLink a:hover {
-        background: rgba(43, 108, 176, 0.05);
+    div[data-baseweb="tab-list"] {
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    button[data-baseweb="tab"] {
+        background: rgba(43, 108, 176, 0.08);
+        border: 1px solid rgba(43, 108, 176, 0.16);
+        border-radius: 999px;
+        color: var(--navy);
+        padding: 0.32rem 0.85rem;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: var(--navy);
+        color: var(--white);
+        border-color: var(--navy);
     }
     </style>
     """,
@@ -211,8 +200,8 @@ def get_mlp_bundle():
 def artifact_status(path) -> str:
     if path.exists():
         size_mb = path.stat().st_size / (1024 * 1024)
-        return f'<span class="status-ok">✓ {path.name} | {size_mb:.1f} MB</span>'
-    return f'<span class="status-missing">! {path.name} missing</span>'
+        return f'<span class="status-ok">{path.name} ready | {size_mb:.1f} MB</span>'
+    return f'<span class="status-missing">{path.name} missing</span>'
 
 
 def is_boolean_like(series: pd.Series) -> bool:
@@ -291,8 +280,8 @@ def render_single_prediction(prediction_row: pd.Series):
     st.markdown(
         f"""
         <div class="note">
-        <strong style="color:#1A365D;">Hybrid model status:</strong> <strong>{flag}</strong><br>
-        <strong style="color:#1A365D;">Two-model gap:</strong> <strong>{gap:+.2f}</strong> percentage points between hybrid and MLP predictions.
+        Hybrid model status: <strong>{flag}</strong><br>
+        Two-model gap: <strong>{gap:+.2f}</strong> percentage points between hybrid and MLP predictions.
         </div>
         """,
         unsafe_allow_html=True,
@@ -315,7 +304,7 @@ st.markdown(
         <h1>Prediction Studio</h1>
         <p>
             Enter processed environmental feature values below and submit the form to generate predictions from both
-            the Hybrid Stacking Ensemble and the Custom Residual MLP models.
+            the Hybrid Stacking Ensemble and the Custom Residual MLP.
         </p>
     </section>
     """,
@@ -326,22 +315,22 @@ st.markdown(
 back_col, _ = st.columns([0.45, 1.55], gap="large")
 with back_col:
     st.page_link("streamlit_app.py", label="Back To Dashboard", icon=":material/arrow_back:")
-st.markdown("<br>", unsafe_allow_html=True)
+
 
 left, right = st.columns([1.6, 1.0], gap="large")
 
 with left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown("### Prediction Input")
+    st.subheader("Prediction Input")
     st.caption("Enter processed feature values as text. Numeric values and boolean values are both supported.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown("### Model Status")
+    st.subheader("Model Status")
     st.markdown(artifact_status(STACKING_ARTIFACT_PATH), unsafe_allow_html=True)
     st.markdown(artifact_status(MLP_ARTIFACT_PATH), unsafe_allow_html=True)
-    st.caption(f"Reference schema: `{DATA_PATH.name}`")
+    st.caption(f"Reference schema: {DATA_PATH}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -361,8 +350,8 @@ default_values = {column: default_value_text(reference_features[column]) for col
 st.markdown(
     f"""
     <div class="note">
-    <strong>Required input fields: {len(feature_columns)}</strong><br>
-    <span style="font-size: 0.95rem;">The form is prefilled with representative values from the processed training data so the interface can be tested immediately.</span>
+    Required input fields: <strong>{len(feature_columns)}</strong>. The form is prefilled with representative values from
+    the processed training data so the interface can be tested immediately.
     </div>
     """,
     unsafe_allow_html=True,
@@ -371,19 +360,19 @@ st.markdown(
 template_col, helper_col = st.columns([1.0, 1.6], gap="large")
 with template_col:
     st.download_button(
-        "Download Input Template",
+        "Download input template",
         data=build_template_csv(reference_features.head(1)),
         file_name="coral_bleaching_input_template.csv",
         mime="text/csv",
         use_container_width=True,
     )
 with helper_col:
-    st.caption("💡 Tip: Use `True/False` or `1/0` for ocean, realm, exposure, substrate, and other boolean-style indicator fields.")
-st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("Use `True/False` or `1/0` for ocean, realm, exposure, substrate, and other boolean-style indicator fields.")
+
 
 with st.form("prediction_form"):
     for section_name, section_fields in feature_groups:
-        with st.expander(f"📁 {section_name}", expanded=section_name in {"Location and Date", "Water and Temperature"}):
+        with st.expander(section_name, expanded=section_name in {"Location and Date", "Water and Temperature"}):
             col_left, col_right = st.columns(2, gap="large")
             for idx, field in enumerate(section_fields):
                 target_col = col_left if idx % 2 == 0 else col_right
@@ -395,15 +384,15 @@ with st.form("prediction_form"):
                         key=f"field_{field}",
                         help=help_text,
                     )
-    st.markdown("<br>", unsafe_allow_html=True)
-    run_prediction = st.form_submit_button("🚀 Run AI Prediction", type="primary", use_container_width=True)
+
+    run_prediction = st.form_submit_button("Predict Now", type="primary", use_container_width=True)
 
 
 if run_prediction:
     input_payload = {column: st.session_state.get(f"field_{column}", "") for column in feature_columns}
     input_df = pd.DataFrame([input_payload])
 
-    with st.spinner("Analyzing environment and running models..."):
+    with st.spinner("Running both models..."):
         try:
             prediction_df, fill_notes = predict_all_models(
                 input_df,
@@ -415,15 +404,14 @@ if run_prediction:
         except Exception as exc:
             st.error(str(exc))
         else:
-            st.success("✅ Prediction completed successfully.")
+            st.success("Prediction completed.")
 
             if fill_notes:
-                with st.expander("⚠️ Auto-filled missing or invalid values"):
+                with st.expander("Auto-filled values"):
                     for note in fill_notes:
                         st.write(f"- {note}")
 
             prediction_row = prediction_df.iloc[0]
-            st.markdown("---")
             render_single_prediction(prediction_row)
 
             result_cols = [
@@ -436,28 +424,24 @@ if run_prediction:
                 "hybrid_vs_mlp_gap",
             ]
 
-            st.markdown("<br>", unsafe_allow_html=True)
             summary_left, summary_right = st.columns([1.3, 1.0], gap="large")
 
             with summary_left:
-                st.markdown('<div class="panel">', unsafe_allow_html=True)
-                st.subheader("Prediction Data")
+                st.subheader("Prediction Results")
                 st.dataframe(
                     prediction_df[result_cols].round(4),
                     use_container_width=True,
                     hide_index=True,
                 )
                 st.download_button(
-                    "Download Result as CSV",
+                    "Download prediction as CSV",
                     data=build_download_bytes(prediction_df),
                     file_name="coral_bleaching_prediction.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
-                st.markdown("</div>", unsafe_allow_html=True)
 
             with summary_right:
-                st.markdown('<div class="panel">', unsafe_allow_html=True)
                 st.subheader("Quick Summary")
                 summary_frame = pd.DataFrame(
                     {
@@ -476,4 +460,3 @@ if run_prediction:
                     }
                 )
                 st.dataframe(summary_frame, use_container_width=True, hide_index=True)
-                st.markdown("</div>", unsafe_allow_html=True)
