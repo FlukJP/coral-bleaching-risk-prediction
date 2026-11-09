@@ -1,0 +1,9 @@
+{
+  "target_valid_rows": 34515,
+  "matched_rows": 789,
+  "output_sha256": "fa60335076bd0a18824ab0adf5909337fdcdc4458a7a8ff73f02ad9279abaf7c",
+  "source_sha256": {
+    "global_bleaching_environmental.csv": "78cc014b1e7887f26f4c44a40d4d9213212f3c6217541c6a1b69e723b61bfacb",
+    "realistic_ocean_climate_dataset.csv": "35c1ca709fcc4b5648315ce18d920c37a19633a8e46f1057e5b856c6973d9785"
+  }
+}

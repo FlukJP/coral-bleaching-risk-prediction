@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from io import StringIO
 
 import pandas as pd
@@ -14,6 +15,9 @@ from model_inference import (
     load_stacking_artifact,
     predict_all_models,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 st.markdown(
@@ -401,8 +405,9 @@ if run_prediction:
                 mlp_artifact,
                 mlp_model,
             )
-        except Exception as exc:
-            st.error(str(exc))
+        except Exception:
+            logger.exception("Prediction failed.")
+            st.error("Prediction could not be completed. Please review the input and try again.")
         else:
             st.success("Prediction completed.")
 
