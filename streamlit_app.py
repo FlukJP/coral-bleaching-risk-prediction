@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import html
+import json
 from pathlib import Path
 
 import streamlit as st
 
 from model_inference import DATA_PATH, MLP_ARTIFACT_PATH, STACKING_ARTIFACT_PATH
+from model_metadata import (
+    FRESH,
+    UNVERIFIABLE,
+    DataStatus,
+    get_dataset_status,
+    get_model_data_status,
+)
 
 
 st.set_page_config(
@@ -19,15 +28,34 @@ def format_size_mb(path: Path) -> str:
     return f"{path.stat().st_size / (1024 * 1024):.1f} MB"
 
 
-def model_status_html(path: Path, title: str, description: str, missing_action: str) -> str:
+def model_status_html(
+    path: Path,
+    title: str,
+    description: str,
+    missing_action: str,
+    data_status: DataStatus,
+) -> str:
+    escaped_title = html.escape(title)
+    escaped_description = html.escape(description)
+    status_class = "ok" if data_status.status == FRESH else "warn"
+    status_details = (
+        f"""
+            <div class="status-meta"><strong>Training data:</strong> {html.escape(data_status.status)}</div>
+            <div class="status-meta">{html.escape(data_status.message)}</div>
+        """
+    )
+    evaluation_details = _evaluation_html(data_status)
     if path.exists():
         return f"""
         <div class="status-card ok">
             <div class="status-icon ok">OK</div>
             <div class="status-body">
-                <div class="status-title">{title}</div>
-                <div class="status-text">{description}</div>
+                <div class="status-title">{escaped_title}</div>
+                <div class="status-text">{escaped_description}</div>
                 <div class="status-meta"><strong>Status:</strong> Online | <strong>File size:</strong> {format_size_mb(path)}</div>
+                <div class="status-meta"><strong>Data status:</strong> <span class="{status_class}">{html.escape(data_status.status)}</span></div>
+                <div class="status-meta">{html.escape(data_status.message)}</div>
+                {evaluation_details}
             </div>
         </div>
         """
@@ -35,17 +63,59 @@ def model_status_html(path: Path, title: str, description: str, missing_action: 
     <div class="status-card warn">
         <div class="status-icon warn">!</div>
         <div class="status-body">
-            <div class="status-title">{title}</div>
-            <div class="status-text">{description}</div>
+            <div class="status-title">{escaped_title}</div>
+            <div class="status-text">{escaped_description}</div>
             <div class="status-meta"><strong>Status:</strong> Re-training required</div>
             <div class="status-meta"><strong>Artifact:</strong> {path.name} missing</div>
-            <div class="status-meta"><strong>Action:</strong> {missing_action}</div>
+            <div class="status-meta"><strong>Action:</strong> {html.escape(missing_action)}</div>
+            {status_details}
         </div>
     </div>
     """
 
 
-data_status = "Fresh" if DATA_PATH.exists() else "Unavailable"
+DATA_METADATA_PATH = DATA_PATH.with_name("metadata.json")
+STACKING_METADATA_PATH = STACKING_ARTIFACT_PATH.parent / "metadata.json"
+MLP_METADATA_PATH = MLP_ARTIFACT_PATH.parent / "metadata.json"
+
+dataset_status = get_dataset_status(DATA_PATH, DATA_METADATA_PATH)
+stacking_data_status = get_model_data_status(
+    DATA_PATH, DATA_METADATA_PATH, STACKING_METADATA_PATH
+)
+mlp_data_status = get_model_data_status(
+    DATA_PATH, DATA_METADATA_PATH, MLP_METADATA_PATH
+)
+
+
+def _evaluation_html(data_status: DataStatus) -> str:
+    model_metadata = data_status.model_metadata
+    if model_metadata is None:
+        return (
+            '<div class="status-meta"><strong>Evaluation:</strong> '
+            f'{html.escape(UNVERIFIABLE)} (ไม่มี metadata ที่ตรวจสอบได้)</div>'
+        )
+
+    evaluation = model_metadata["evaluation"]
+    method = html.escape(evaluation["method"])
+    n_folds = evaluation["n_folds"]
+    n_validation_rows = evaluation["n_validation_rows"]
+    evaluated_at = html.escape(evaluation["evaluated_at"])
+    metrics = html.escape(
+        json.dumps(evaluation["metrics"], ensure_ascii=False, sort_keys=True)
+    )
+    coverage = model_metadata["coverage"]
+    matched_rows = coverage["matched_rows"]
+    denominator = coverage["match_denominator"]
+    matched_share = coverage["matched_share"] * 100
+    imputed_shares = ", ".join(
+        f"{html.escape(feature)} {share * 100:.1f}%"
+        for feature, share in coverage["imputed_share_by_feature"].items()
+    )
+    return f"""
+        <div class="status-meta"><strong>Evaluation:</strong> {method}, {n_folds} folds; {n_validation_rows:,} validation rows across folds; evaluated {evaluated_at}</div>
+        <div class="status-meta"><strong>Metrics:</strong> {metrics}</div>
+        <div class="status-meta"><strong>Auxiliary coverage:</strong> {matched_rows:,}/{denominator:,} rows ({matched_share:.1f}% matched); imputed shares: {imputed_shares}</div>
+    """
 
 st.markdown(
     """
@@ -244,9 +314,8 @@ st.markdown(
     <section class="hero">
         <h1>Coral Bleaching AI Studio</h1>
         <p>
-            This advanced application presents two complementary artificial intelligence models for high-accuracy coral
-            bleaching risk prediction. Analyze processed environmental data, review model availability, and move directly
-            into the prediction workflow from this dashboard.
+            This application presents two complementary models for coral bleaching severity estimates. Review model
+            availability, the training-data status, and evaluation evidence before using the prediction workflow.
         </p>
     </section>
     """,
@@ -263,14 +332,11 @@ with main_col:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
         st.markdown("### Hybrid Stacking Ensemble")
         st.write(
-            "Our first approach utilizes a sophisticated Stacking Ensemble. This multi-level architecture strategically "
-            "combines multiple structured machine learning models and passes their predictions into a meta-learner. "
-            "The final system is designed to reduce variance, balance model bias, and deliver strong performance for "
-            "complex ecological risk estimation."
+            "This Stacking Ensemble combines structured machine-learning models and passes their predictions into a "
+            "meta-learner to estimate bleaching severity and associated risk."
         )
         st.write(
-            "This approach is particularly suitable when the platform needs both a severity estimate and a robust, "
-            "operational prediction workflow that remains stable on processed environmental features."
+            "Its estimates are based on the feature schema and training data recorded in the model metadata."
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -283,8 +349,7 @@ with main_col:
             "through residual connections and attention-based feature weighting."
         )
         st.write(
-            "The model complements the ensemble pipeline by providing a neural perspective on the same input space, "
-            "helping users compare how tree-based and residual deep learning approaches behave under identical conditions."
+            "Its evaluation metrics and validation setup are shown with the model's training-data status."
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -295,8 +360,9 @@ with side_col:
         model_status_html(
             STACKING_ARTIFACT_PATH,
             "Core Stacking Ensemble",
-            "Primary production model for structured bleaching risk prediction.",
+            "Ensemble model for severity and risk estimates from processed environmental features.",
             "Check the ensemble training notebook and re-run the final export cells.",
+            stacking_data_status,
         ),
         unsafe_allow_html=True,
     )
@@ -304,19 +370,21 @@ with side_col:
         model_status_html(
             MLP_ARTIFACT_PATH,
             "Custom Residual MLP",
-            "Neural comparison model for deep feature interaction analysis.",
+            "Neural model for severity estimates from processed environmental features.",
             "Check the neural training notebook and re-run the artifact export step.",
+            mlp_data_status,
         ),
         unsafe_allow_html=True,
     )
     st.markdown(
         f"""
-        <div class="status-card {'ok' if DATA_PATH.exists() else 'warn'}">
-            <div class="status-icon {'ok' if DATA_PATH.exists() else 'warn'}">{'OK' if DATA_PATH.exists() else '!'}</div>
+        <div class="status-card {'ok' if dataset_status.status == FRESH else 'warn'}">
+            <div class="status-icon {'ok' if dataset_status.status == FRESH else 'warn'}">{'OK' if dataset_status.status == FRESH else '!'}</div>
             <div class="status-body">
-                <div class="status-title">Global Environmental Data Source</div>
-                <div class="status-meta"><strong>Status:</strong> {data_status}</div>
-                <div class="status-meta"><strong>Path:</strong> {DATA_PATH.name}</div>
+                <div class="status-title">Model-Ready Dataset</div>
+                <div class="status-meta"><strong>Status:</strong> {html.escape(dataset_status.status)}</div>
+                <div class="status-meta">{html.escape(dataset_status.message)}</div>
+                <div class="status-meta"><strong>Path:</strong> {html.escape(DATA_PATH.name)}</div>
             </div>
         </div>
         """,
