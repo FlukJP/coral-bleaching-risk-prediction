@@ -10,6 +10,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from model_preprocessing import (
+    FEATURE_COLUMNS,
+    REALM_INDICATOR_COLUMNS,
+    ModelPreprocessor,
+)
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 DATA_PATH = ROOT_DIR / "data" / "bleaching_model_ready.csv"
@@ -89,15 +95,18 @@ def load_reference_features() -> pd.DataFrame:
     return df
 
 
-def load_stacking_artifact() -> dict:
-    return joblib.load(STACKING_ARTIFACT_PATH)
+def load_stacking_artifact(artifact_path: Path | None = None) -> dict:
+    return joblib.load(artifact_path or STACKING_ARTIFACT_PATH)
 
 
-def load_mlp_artifact() -> tuple[dict, CoralResidualMLP]:
+def load_mlp_artifact(
+    artifact_path: Path | None = None,
+) -> tuple[dict, CoralResidualMLP]:
+    path = artifact_path or MLP_ARTIFACT_PATH
     try:
-        artifact = torch.load(MLP_ARTIFACT_PATH, map_location="cpu", weights_only=False)
+        artifact = torch.load(path, map_location="cpu", weights_only=False)
     except TypeError:
-        artifact = torch.load(MLP_ARTIFACT_PATH, map_location="cpu")
+        artifact = torch.load(path, map_location="cpu")
 
     config = artifact["config"]
     model = CoralResidualMLP(
@@ -150,6 +159,26 @@ def _is_boolean_like(series: pd.Series) -> bool:
 def prepare_input_frame(input_df: pd.DataFrame, reference_df: pd.DataFrame, stacking_artifact: dict, mlp_artifact: dict) -> PreparedInput:
     if input_df.empty:
         raise ValueError("The input table is empty.")
+
+    for artifact in (stacking_artifact, mlp_artifact):
+        artifact_version = artifact.get("artifact_version", 1)
+        if type(artifact_version) is not int or artifact_version not in {1, 2}:
+            raise ValueError("Invalid artifact_version: expected integer 1 or 2.")
+        if artifact_version == 2 and "preprocessing_state" not in artifact:
+            raise ValueError(
+                "Invalid preprocessing_state: missing for artifact_version 2."
+            )
+    has_stacking_state = "preprocessing_state" in stacking_artifact
+    has_mlp_state = "preprocessing_state" in mlp_artifact
+    if has_stacking_state or has_mlp_state:
+        return _prepare_input_frame_with_state(
+            input_df,
+            reference_df,
+            stacking_artifact,
+            mlp_artifact,
+            has_stacking_state,
+            has_mlp_state,
+        )
 
     df = input_df.copy()
     original_features = stacking_artifact.get("original_feature_names", stacking_artifact["feature_names"])
@@ -206,6 +235,127 @@ def prepare_input_frame(input_df: pd.DataFrame, reference_df: pd.DataFrame, stac
         original=canonical[original_features].copy(),
         stacking=stacking_df,
         mlp=mlp_df,
+        fill_notes=fill_notes,
+    )
+
+
+def _prepare_input_frame_with_state(
+    input_df: pd.DataFrame,
+    reference_df: pd.DataFrame,
+    stacking_artifact: dict,
+    mlp_artifact: dict,
+    has_stacking_state: bool,
+    has_mlp_state: bool,
+) -> PreparedInput:
+    original_features = stacking_artifact.get(
+        "original_feature_names", stacking_artifact["feature_names"]
+    )
+    sanitized_features = stacking_artifact["feature_names"]
+    mlp_features = mlp_artifact["config"]["feature_names"]
+    if list(original_features) != list(FEATURE_COLUMNS):
+        raise ValueError(
+            "Invalid preprocessing_state: Stacking feature order does not match the model schema."
+        )
+    if list(mlp_features) != list(FEATURE_COLUMNS):
+        raise ValueError(
+            "Invalid preprocessing_state: MLP feature order does not match the model schema."
+        )
+
+    stacking_preprocessor = (
+        ModelPreprocessor.from_state(stacking_artifact["preprocessing_state"])
+        if has_stacking_state
+        else None
+    )
+    mlp_preprocessor = (
+        ModelPreprocessor.from_state(mlp_artifact["preprocessing_state"])
+        if has_mlp_state
+        else None
+    )
+
+    df = input_df.copy()
+    raw = pd.DataFrame(index=df.index)
+    missing_columns: list[str] = []
+    for original_name, sanitized_name in zip(original_features, sanitized_features):
+        if original_name in df.columns:
+            raw[original_name] = df[original_name]
+        elif sanitized_name in df.columns:
+            raw[original_name] = df[sanitized_name]
+        else:
+            missing_columns.append(original_name)
+    if missing_columns:
+        preview = ", ".join(missing_columns[:8])
+        suffix = " ..." if len(missing_columns) > 8 else ""
+        raise ValueError(
+            "Missing required feature columns. "
+            f"Expected the processed schema from bleaching_model_ready.csv. Missing: {preview}{suffix}"
+        )
+
+    fallback = raw.copy()
+    fill_notes: list[str] = []
+    for column in original_features:
+        reference_col = reference_df[column]
+        default_value = _default_value(reference_col)
+        if _is_boolean_like(reference_col):
+            coerced = raw[column].map(_coerce_bool)
+            missing_mask = coerced.isna()
+            raw[column] = coerced
+            fallback[column] = coerced
+            if missing_mask.any():
+                count = int(missing_mask.sum())
+                fallback.loc[missing_mask, column] = default_value
+                if column in REALM_INDICATOR_COLUMNS:
+                    raw.loc[missing_mask, column] = default_value
+                fill_notes.append(
+                    f"{column}: filled {count} invalid boolean value(s) with {default_value}"
+                )
+            fallback[column] = fallback[column].astype(int)
+            if column in REALM_INDICATOR_COLUMNS:
+                raw[column] = raw[column].astype(int)
+        elif pd.api.types.is_numeric_dtype(reference_col):
+            coerced = pd.to_numeric(raw[column], errors="coerce")
+            raw[column] = coerced
+            fallback[column] = coerced
+            missing_mask = coerced.isna() | ~np.isfinite(coerced)
+            if missing_mask.any():
+                count = int(missing_mask.sum())
+                fallback.loc[missing_mask, column] = default_value
+                note_value = (
+                    "artifact medians"
+                    if has_stacking_state or has_mlp_state
+                    else f"{default_value:.4f}"
+                )
+                fill_notes.append(
+                    f"{column}: filled {count} missing numeric value(s) with {note_value}"
+                )
+        else:
+            missing_mask = raw[column].isna() | (
+                raw[column].astype(str).str.strip() == ""
+            )
+            if missing_mask.any():
+                count = int(missing_mask.sum())
+                raw.loc[missing_mask, column] = default_value
+                fallback.loc[missing_mask, column] = default_value
+                fill_notes.append(
+                    f"{column}: filled {count} missing text value(s) with '{default_value}'"
+                )
+
+    stacking_original = (
+        stacking_preprocessor.transform(raw)
+        if stacking_preprocessor
+        else fallback.loc[:, original_features].copy()
+    )
+    mlp_frame = (
+        mlp_preprocessor.transform(raw)
+        if mlp_preprocessor
+        else fallback.loc[:, mlp_features].copy()
+    )
+    stacking_frame = stacking_original.loc[:, original_features].rename(
+        columns=dict(zip(original_features, sanitized_features))
+    )
+    return PreparedInput(
+        original=stacking_original.loc[:, original_features].copy(),
+        stacking=stacking_frame,
+        mlp=mlp_frame,
         fill_notes=fill_notes,
     )
 
